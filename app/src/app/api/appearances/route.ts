@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import type { Appearance, Member } from '@/types/index';
 
+export const dynamic = 'force-dynamic';
+
 function toJSTDateString(date: Date): string {
   const jst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
   return jst.toISOString().split('T')[0];

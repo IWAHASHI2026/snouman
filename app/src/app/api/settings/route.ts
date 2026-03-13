@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import type { Settings } from '@/types/index';
 
+export const dynamic = 'force-dynamic';
+
 interface SettingsRow {
   notification_enabled: number;
   notification_timing: number;

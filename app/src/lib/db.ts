@@ -98,7 +98,7 @@ function seedMembers(db: Database.Database): void {
   if (count.count > 0) return;
 
   const insert = db.prepare(
-    'INSERT INTO members (id, name, name_kana, name_alpha, color, color_name, active) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    'INSERT OR IGNORE INTO members (id, name, name_kana, name_alpha, color, color_name, active) VALUES (?, ?, ?, ?, ?, ?, ?)'
   );
 
   const members = [
@@ -126,7 +126,7 @@ function seedSettings(db: Database.Database): void {
   if (count.count > 0) return;
 
   db.prepare(
-    `INSERT INTO settings (id, notification_enabled, notification_timing, notification_members, notification_media)
+    `INSERT OR IGNORE INTO settings (id, notification_enabled, notification_timing, notification_members, notification_media)
      VALUES (1, 1, 30, ?, ?)`
   ).run(
     JSON.stringify([1, 2, 3, 4, 5, 6, 7, 8, 9]),

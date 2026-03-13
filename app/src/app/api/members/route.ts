@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import type { Member } from '@/types/index';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const db = getDb();

@@ -1,0 +1,115 @@
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap");
+@import "tailwindcss";
+
+:root {
+  --background: #FFFFFF;
+  --background-sub: #F5F5F5;
+  --foreground: #333333;
+  --foreground-sub: #666666;
+  --accent: #4A90D9;
+  --header-bg: #E8F4FD;
+  --tab-height: 56px;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-background-sub: var(--background-sub);
+  --color-foreground: var(--foreground);
+  --color-foreground-sub: var(--foreground-sub);
+  --color-accent: var(--accent);
+  --color-header-bg: var(--header-bg);
+}
+
+body {
+  font-family: "Noto Sans JP", sans-serif;
+  background-color: var(--background-sub);
+  color: var(--foreground);
+  position: relative;
+  min-height: 100dvh;
+}
+
+/* Subtle snowflake background pattern */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'%3E%3Ctext x='30' y='35' text-anchor='middle' font-size='20'%3E%E2%9D%84%3C/text%3E%3C/svg%3E");
+  background-repeat: repeat;
+}
+
+/* Bottom tab bar styles */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--tab-height);
+  background: var(--background);
+  border-top: 1px solid #E0E0E0;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  z-index: 50;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.bottom-nav a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 10px;
+  color: var(--foreground-sub);
+  text-decoration: none;
+  padding: 4px 12px;
+  transition: color 0.2s;
+}
+
+.bottom-nav a.active {
+  color: var(--accent);
+}
+
+.bottom-nav a .icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+/* Member badge colors */
+.badge-iwamoto { background-color: #F9E401; color: #333333; }
+.badge-fukazawa { background-color: #784497; color: #FFFFFF; }
+.badge-raul { background-color: #FFFFFF; color: #333333; border: 1px solid #E0E0E0; }
+.badge-watanabe { background-color: #0068B7; color: #FFFFFF; }
+.badge-mukai { background-color: #EE7700; color: #333333; }
+.badge-abe { background-color: #009F45; color: #333333; }
+.badge-meguro { background-color: #2A2C2B; color: #FFFFFF; }
+.badge-miyadate { background-color: #E60012; color: #FFFFFF; }
+.badge-sakuma { background-color: #FF69B4; color: #333333; }
+
+/* Card styles */
+.appearance-card {
+  background: var(--background);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+  padding: 12px 16px;
+  border-left: 4px solid transparent;
+}
+
+/* Main content padding for tab bar */
+.main-content {
+  padding-bottom: calc(var(--tab-height) + 16px);
+  position: relative;
+  z-index: 1;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-thumb {
+  background: #CCC;
+  border-radius: 2px;
+}

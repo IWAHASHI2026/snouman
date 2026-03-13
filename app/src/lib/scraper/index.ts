@@ -52,13 +52,11 @@ function insertAppearance(
       .run(title, mediaType, channel, startAt, endAt, description, sourceUrl);
 
     if (result.changes === 0) {
-      // Duplicate detected, skip member insertion
       return false;
     }
 
     const appearanceId = result.lastInsertRowid as number;
 
-    // Insert member associations
     const insertMember = db.prepare(
       'INSERT OR IGNORE INTO appearance_members (appearance_id, member_id) VALUES (?, ?)'
     );
@@ -77,6 +75,77 @@ function insertAppearance(
   }
 }
 
+function detectMediaType(title: string, channel: string | null): MediaType {
+  const lowerTitle = title.toLowerCase();
+  const lowerChannel = (channel || '').toLowerCase();
+
+  if (
+    lowerTitle.includes('ラジオ') ||
+    lowerTitle.includes('radio') ||
+    lowerChannel.includes('ラジオ') ||
+    lowerChannel.includes('fm') ||
+    lowerChannel.includes('am') ||
+    lowerChannel.includes('ニッポン放送') ||
+    lowerChannel.includes('文化放送') ||
+    lowerChannel.includes('tbsラジオ')
+  ) {
+    return 'RADIO';
+  }
+
+  if (lowerTitle.includes('映画') || lowerTitle.includes('movie')) {
+    return 'MOVIE';
+  }
+
+  return 'TV';
+}
+
+// Parse Japanese date/time format like "2026年3月14日(土)" and "昼4:30" or "夜7:00"
+function parseJapaneseDateTime(dateText: string, timeText: string): { startAt: string; endAt: string | null } | null {
+  // Extract year, month, day
+  const dateMatch = dateText.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
+  if (!dateMatch) return null;
+
+  const year = dateMatch[1];
+  const month = dateMatch[2].padStart(2, '0');
+  const day = dateMatch[3].padStart(2, '0');
+
+  // Parse time - handles formats like "昼4:30", "夜7:00", "朝8:00", "深夜1:00"
+  const timeRange = timeText.match(/(\d{1,2}):(\d{2})(?:\s*[-～〜]\s*(\d{1,2}):(\d{2}))?/);
+  if (!timeRange) {
+    return { startAt: `${year}-${month}-${day}T00:00:00+09:00`, endAt: null };
+  }
+
+  let startHour = parseInt(timeRange[1], 10);
+  const startMin = timeRange[2];
+
+  // Adjust hour based on time-of-day prefix
+  if (timeText.includes('深夜') || timeText.includes('午前')) {
+    // 深夜1:00 means 25:00 (1 AM next day concept in Japanese TV)
+    // but we keep it as-is for simplicity
+  } else if (timeText.includes('昼') || timeText.includes('午後')) {
+    if (startHour < 12) startHour += 12;
+  } else if (timeText.includes('夜')) {
+    if (startHour < 12) startHour += 12;
+  } else if (timeText.includes('朝')) {
+    // morning, keep as-is
+  }
+
+  const startAt = `${year}-${month}-${day}T${String(startHour).padStart(2, '0')}:${startMin}:00+09:00`;
+
+  let endAt: string | null = null;
+  if (timeRange[3] && timeRange[4]) {
+    let endHour = parseInt(timeRange[3], 10);
+    const endMin = timeRange[4];
+    if (timeText.includes('夜') || timeText.includes('昼') || timeText.includes('午後')) {
+      if (endHour < 12) endHour += 12;
+    }
+    endAt = `${year}-${month}-${day}T${String(endHour).padStart(2, '0')}:${endMin}:00+09:00`;
+  }
+
+  return { startAt, endAt };
+}
+
+// Scrape Snow Man group page on ザテレビジョン
 export async function scrapeTheTV(): Promise<number> {
   const source = 'thetv';
   let totalInserted = 0;
@@ -84,91 +153,139 @@ export async function scrapeTheTV(): Promise<number> {
   try {
     console.log('[scraper] Starting ザテレビジョン scrape...');
 
-    // Scrape TV listing pages for Snow Man
-    const searchUrl = 'https://thetv.jp/search/?q=Snow+Man&type=program';
-    const html = await fetchPage(searchUrl);
+    // Snow Man group page
+    const groupUrl = 'https://thetv.jp/person/2000024159/';
+    const html = await fetchPage(groupUrl);
     const $ = cheerio.load(html);
 
-    // Parse program listing items
-    // The actual selectors depend on the site structure; this is a best-effort implementation
-    const programItems = $('article, .program-item, .search-result-item, .resultList__item');
+    console.log(`[scraper] Fetched Snow Man group page`);
 
-    console.log(`[scraper] Found ${programItems.length} potential items on ザテレビジョン`);
+    // Find all links that point to /program/ pages
+    const programLinks = $('a[href*="/program/"]');
+    console.log(`[scraper] Found ${programLinks.length} program links`);
 
-    for (let i = 0; i < programItems.length; i++) {
-      const item = $(programItems[i]);
+    const seen = new Set<string>();
 
-      const titleEl = item.find('h2, h3, .program-title, .resultList__itemTitle, a[title]').first();
-      const title = titleEl.text().trim();
+    for (let i = 0; i < programLinks.length; i++) {
+      const el = $(programLinks[i]);
+      const href = el.attr('href') || '';
+      const fullUrl = href.startsWith('http') ? href : `https://thetv.jp${href}`;
 
-      if (!title) continue;
+      // Deduplicate by program URL
+      const programBase = href.replace(/\/\d+\/$/, '/');
+      if (seen.has(programBase)) continue;
+      seen.add(programBase);
 
-      // Extract broadcast info
-      const infoText = item.find('.program-info, .resultList__itemInfo, .broadcast-info, time').text().trim();
-      const channelEl = item.find('.channel, .program-channel, .resultList__itemChannel').first();
-      const channel = channelEl.text().trim() || null;
+      // Get the surrounding text context for title and schedule info
+      const container = el.closest('li, div, article, section');
+      const contextText = container.length ? container.text() : el.text();
+      const title = el.text().trim();
 
-      // Try to extract date/time from the info text
-      const dateMatch = infoText.match(/(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})/);
-      const timeMatch = infoText.match(/(\d{1,2}):(\d{2})/);
+      if (!title || title.length < 2) continue;
 
-      let startAt: string;
-      if (dateMatch) {
-        const year = dateMatch[1];
-        const month = dateMatch[2].padStart(2, '0');
-        const day = dateMatch[3].padStart(2, '0');
-        if (timeMatch) {
-          const hour = timeMatch[1].padStart(2, '0');
-          const minute = timeMatch[2];
-          startAt = `${year}-${month}-${day}T${hour}:${minute}:00`;
-        } else {
-          startAt = `${year}-${month}-${day}T00:00:00`;
-        }
-      } else {
-        // If we can't parse a date, skip this item
+      // Try to parse date/time from context
+      const parsed = parseJapaneseDateTime(contextText, contextText);
+
+      if (!parsed) {
+        console.log(`[scraper] Skipping "${title}" - no date found`);
         continue;
       }
 
-      // Extract link for source URL
-      const linkEl = item.find('a[href]').first();
-      const href = linkEl.attr('href') || null;
-      const sourceUrl = href ? (href.startsWith('http') ? href : `https://thetv.jp${href}`) : null;
+      // Extract channel from context
+      const channelMatch = contextText.match(/(TBS|フジテレビ|日本テレビ|テレビ朝日|テレビ東京|NHK[^\s]*|MBS|ABC|関西テレビ|読売テレビ|BS[^\s]*|WOWOW|Eテレ|NTV)/);
+      const channel = channelMatch ? channelMatch[1] : null;
 
-      // Determine description
-      const descEl = item.find('.program-description, .resultList__itemDesc, p').first();
-      const description = descEl.text().trim() || null;
+      // Detect media type
+      const mediaType = detectMediaType(title, channel);
 
-      // Identify members from title and description
-      const fullText = `${title} ${description || ''} ${infoText}`;
-      const memberIds = findMemberIds(fullText);
+      // For group page, identify members from title or default to all
+      const memberIds = findMemberIds(contextText);
 
-      if (memberIds.length === 0) {
-        // Skip items where we can't identify any Snow Man member
-        continue;
-      }
+      const inserted = insertAppearance(
+        title,
+        mediaType,
+        channel,
+        parsed.startAt,
+        parsed.endAt,
+        null,
+        fullUrl,
+        memberIds.length > 0 ? memberIds : [1, 2, 3, 4, 5, 6, 7, 8, 9]
+      );
 
-      // Determine media type
-      let mediaType: MediaType = 'TV';
-      const lowerTitle = title.toLowerCase();
-      const lowerChannel = (channel || '').toLowerCase();
-      if (
-        lowerTitle.includes('ラジオ') ||
-        lowerTitle.includes('radio') ||
-        lowerChannel.includes('ラジオ') ||
-        lowerChannel.includes('fm') ||
-        lowerChannel.includes('am')
-      ) {
-        mediaType = 'RADIO';
-      }
-
-      const inserted = insertAppearance(title, mediaType, channel, startAt, null, description, sourceUrl, memberIds);
       if (inserted) {
         totalInserted++;
+        console.log(`[scraper] Inserted: "${title}" at ${parsed.startAt}`);
       }
 
-      // Respect crawl delay
-      if (i < programItems.length - 1) {
+      if (i < programLinks.length - 1) {
         await sleep(CRAWL_DELAY_MS);
+      }
+    }
+
+    // Also scrape individual member pages for solo appearances
+    const memberPages: { id: number; name: string; url: string }[] = [
+      { id: 1, name: '岩本照', url: 'https://thetv.jp/person/1000089370/' },
+      { id: 2, name: '深澤辰哉', url: 'https://thetv.jp/person/1000089371/' },
+      { id: 3, name: 'ラウール', url: 'https://thetv.jp/person/2000039356/' },
+      { id: 4, name: '渡辺翔太', url: 'https://thetv.jp/person/1000089372/' },
+      { id: 5, name: '向井康二', url: 'https://thetv.jp/person/1000073109/' },
+      { id: 6, name: '阿部亮平', url: 'https://thetv.jp/person/2000024165/' },
+      { id: 7, name: '目黒蓮', url: 'https://thetv.jp/person/2000002192/' },
+      { id: 8, name: '宮舘涼太', url: 'https://thetv.jp/person/2000024163/' },
+      { id: 9, name: '佐久間大介', url: 'https://thetv.jp/person/2000024162/' },
+    ];
+
+    for (const member of memberPages) {
+      try {
+        await sleep(CRAWL_DELAY_MS);
+        console.log(`[scraper] Fetching page for ${member.name}...`);
+        const memberHtml = await fetchPage(member.url);
+        const $m = cheerio.load(memberHtml);
+
+        const memberProgramLinks = $m('a[href*="/program/"]');
+
+        for (let j = 0; j < memberProgramLinks.length; j++) {
+          const el = $m(memberProgramLinks[j]);
+          const mHref = el.attr('href') || '';
+          const mFullUrl = mHref.startsWith('http') ? mHref : `https://thetv.jp${mHref}`;
+
+          const mProgramBase = mHref.replace(/\/\d+\/$/, '/');
+          if (seen.has(mProgramBase)) continue;
+          seen.add(mProgramBase);
+
+          const mContainer = el.closest('li, div, article, section');
+          const mContextText = mContainer.length ? mContainer.text() : el.text();
+          const mTitle = el.text().trim();
+
+          if (!mTitle || mTitle.length < 2) continue;
+
+          const mParsed = parseJapaneseDateTime(mContextText, mContextText);
+          if (!mParsed) continue;
+
+          const mChannelMatch = mContextText.match(/(TBS|フジテレビ|日本テレビ|テレビ朝日|テレビ東京|NHK[^\s]*|MBS|ABC|関西テレビ|読売テレビ|BS[^\s]*|WOWOW|Eテレ|NTV)/);
+          const mChannel = mChannelMatch ? mChannelMatch[1] : null;
+
+          const mMediaType = detectMediaType(mTitle, mChannel);
+          const mMemberIds = findMemberIds(mContextText);
+
+          const mInserted = insertAppearance(
+            mTitle,
+            mMediaType,
+            mChannel,
+            mParsed.startAt,
+            mParsed.endAt,
+            null,
+            mFullUrl,
+            mMemberIds.length > 0 ? mMemberIds : [member.id]
+          );
+
+          if (mInserted) {
+            totalInserted++;
+            console.log(`[scraper] Inserted (${member.name}): "${mTitle}" at ${mParsed.startAt}`);
+          }
+        }
+      } catch (memberError) {
+        console.error(`[scraper] Failed to scrape ${member.name}:`, memberError);
       }
     }
 
@@ -188,13 +305,8 @@ export async function scrapeAll(): Promise<{ total: number; sources: Record<stri
 
   const sources: Record<string, number> = {};
 
-  // ザテレビジョン
   const theTvCount = await scrapeTheTV();
   sources['thetv'] = theTvCount;
-
-  // Additional scrapers can be added here in the future:
-  // sources['tvguide'] = await scrapeTVGuide();
-  // sources['natalie'] = await scrapeNatalie();
 
   const total = Object.values(sources).reduce((sum, count) => sum + count, 0);
   console.log(`[scraper] Full scrape completed: ${total} new appearance(s) total`);

@@ -150,7 +150,7 @@ function getDb(): Database.Database {
 
 const db = new Proxy({} as Database.Database, {
   get(_target, prop) {
-    return (getDb() as Record<string | symbol, unknown>)[prop];
+    return (getDb() as unknown as Record<string | symbol, unknown>)[prop];
   },
 });
 

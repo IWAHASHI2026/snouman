@@ -8,7 +8,7 @@ export async function GET() {
   try {
     const db = getDb();
     const members = db.prepare('SELECT * FROM members WHERE active = 1').all() as Member[];
-    return NextResponse.json({ members });
+    return NextResponse.json(members);
   } catch (error) {
     console.error('Failed to fetch members:', error);
     return NextResponse.json(

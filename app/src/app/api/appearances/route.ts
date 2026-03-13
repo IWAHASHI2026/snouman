@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
     const toDate = searchParams.get('to') || toJSTDateString(defaultTo);
     const memberIds = searchParams.get('member_ids') || searchParams.get('member');
     const mediaType = searchParams.get('media_type') || searchParams.get('media');
+    const sort = searchParams.get('sort') === 'desc' ? 'DESC' : 'ASC';
 
     let query = `
       SELECT DISTINCT a.*
@@ -48,7 +49,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    query += ' ORDER BY a.start_at ASC';
+    query += ` ORDER BY a.start_at ${sort}`;
 
     const appearances = db.prepare(query).all(...params) as Appearance[];
 

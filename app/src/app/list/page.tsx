@@ -41,6 +41,7 @@ export default function ListPage() {
   const [hasMore, setHasMore] = useState(true);
   const [offset, setOffset] = useState(0);
 
+  const [timeRange, setTimeRange] = useState<'future' | 'past'>('future');
   const [selectedMedia, setSelectedMedia] = useState<Set<MediaType>>(
     new Set(['TV', 'RADIO', 'MOVIE'])
   );
@@ -65,15 +66,25 @@ export default function ListPage() {
 
       try {
         const today = new Date().toISOString().slice(0, 10);
-        const futureDate = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)
-          .toISOString()
-          .slice(0, 10);
         const params = new URLSearchParams({
-          from: today,
-          to: futureDate,
           limit: String(PAGE_SIZE),
           offset: String(currentOffset),
         });
+
+        if (timeRange === 'future') {
+          const futureDate = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)
+            .toISOString()
+            .slice(0, 10);
+          params.set('from', today);
+          params.set('to', futureDate);
+        } else {
+          const pastDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+            .toISOString()
+            .slice(0, 10);
+          params.set('from', pastDate);
+          params.set('to', today);
+          params.set('sort', 'desc');
+        }
 
         const mediaArr = Array.from(selectedMedia);
         if (mediaArr.length < 3) {
@@ -102,14 +113,14 @@ export default function ListPage() {
         setLoadingMore(false);
       }
     },
-    [offset, selectedMedia, selectedMemberId]
+    [offset, selectedMedia, selectedMemberId, timeRange]
   );
 
   // Initial fetch and refetch on filter change
   useEffect(() => {
     fetchAppearances(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedMedia, selectedMemberId]);
+  }, [selectedMedia, selectedMemberId, timeRange]);
 
   const toggleMedia = useCallback((mediaType: MediaType) => {
     setSelectedMedia((prev) => {
@@ -124,11 +135,37 @@ export default function ListPage() {
   }, []);
 
   const grouped = groupByDate(appearances);
-  const sortedDates = Object.keys(grouped).sort();
+  const sortedDates = Object.keys(grouped).sort(
+    timeRange === 'past' ? (a, b) => b.localeCompare(a) : undefined
+  );
 
   return (
     <div className="flex flex-col gap-4">
       <h2 className="text-base font-bold text-foreground">出演リスト</h2>
+
+      {/* Time range toggle */}
+      <div className="flex rounded-lg bg-background-sub p-1">
+        <button
+          onClick={() => setTimeRange('future')}
+          className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
+            timeRange === 'future'
+              ? 'bg-white text-foreground shadow-sm'
+              : 'text-foreground-sub'
+          }`}
+        >
+          これから
+        </button>
+        <button
+          onClick={() => setTimeRange('past')}
+          className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
+            timeRange === 'past'
+              ? 'bg-white text-foreground shadow-sm'
+              : 'text-foreground-sub'
+          }`}
+        >
+          過去
+        </button>
+      </div>
 
       {/* Filters */}
       <div className="flex flex-col gap-3 rounded-xl bg-white p-3 shadow-sm">

@@ -16,7 +16,7 @@ const FullCalendar = dynamic(() => import('@fullcalendar/react'), {
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
-import type { DatesSetArg, EventInput } from '@fullcalendar/core';
+import type { DatesSetArg, EventClickArg, EventInput } from '@fullcalendar/core';
 
 const MEMBER_COLORS: Record<string, string> = {
   岩本照: '#F9E401',
@@ -107,9 +107,19 @@ export default function CalendarPage() {
           backgroundColor: color,
           borderColor: color === '#E0E0E0' ? '#CCCCCC' : color,
           textColor,
+          extendedProps: {
+            sourceUrl: a.source_url,
+          },
         };
       });
   }, [appearances, selectedMembers]);
+
+  const handleEventClick = useCallback((arg: EventClickArg) => {
+    const url = arg.event.extendedProps.sourceUrl;
+    if (url) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  }, []);
 
   return (
     <div className="flex flex-col gap-4">
@@ -132,6 +142,8 @@ export default function CalendarPage() {
             }}
             events={events}
             datesSet={handleDatesSet}
+            eventClick={handleEventClick}
+            eventClassNames="cursor-pointer"
             height="auto"
             buttonText={{
               today: '今日',

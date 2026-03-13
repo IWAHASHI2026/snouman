@@ -134,20 +134,25 @@ function seedSettings(db: Database.Database): void {
   );
 }
 
-// Singleton pattern using globalThis to survive Next.js hot reload
+// Lazy singleton pattern — DB is only initialized when first accessed at runtime,
+// not at module evaluation time. This prevents errors during Next.js build
+// where multiple workers load the module in parallel.
 const globalForDb = globalThis as typeof globalThis & {
   __snowman_db?: Database.Database;
 };
 
-if (!globalForDb.__snowman_db) {
-  globalForDb.__snowman_db = createDatabase();
+function getDb(): Database.Database {
+  if (!globalForDb.__snowman_db) {
+    globalForDb.__snowman_db = createDatabase();
+  }
+  return globalForDb.__snowman_db;
 }
 
-const db: Database.Database = globalForDb.__snowman_db;
+const db = new Proxy({} as Database.Database, {
+  get(_target, prop) {
+    return (getDb() as Record<string | symbol, unknown>)[prop];
+  },
+});
 
 export default db;
-
-// Named export for backward compatibility with existing API routes
-export function getDb(): Database.Database {
-  return db;
-}
+export { getDb };

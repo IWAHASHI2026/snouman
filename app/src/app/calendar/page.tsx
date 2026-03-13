@@ -38,7 +38,7 @@ export default function CalendarPage() {
   const [selectedMembers, setSelectedMembers] = useState<Set<number>>(
     new Set()
   );
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [dateRange, setDateRange] = useState<{
     from: string;
     to: string;

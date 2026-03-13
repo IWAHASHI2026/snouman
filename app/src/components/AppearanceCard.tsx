@@ -38,7 +38,7 @@ export default function AppearanceCard({
     ? `${formatTime(appearance.start_at)} - ${formatTime(appearance.end_at)}`
     : formatTime(appearance.start_at);
 
-  return (
+  const content = (
     <div
       className="appearance-card"
       style={{
@@ -66,4 +66,14 @@ export default function AppearanceCard({
       </div>
     </div>
   );
+
+  if (appearance.source_url) {
+    return (
+      <a href={appearance.source_url} target="_blank" rel="noopener noreferrer" className="block">
+        {content}
+      </a>
+    );
+  }
+
+  return content;
 }

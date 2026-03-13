@@ -65,8 +65,12 @@ export default function ListPage() {
 
       try {
         const today = new Date().toISOString().slice(0, 10);
+        const futureDate = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)
+          .toISOString()
+          .slice(0, 10);
         const params = new URLSearchParams({
           from: today,
+          to: futureDate,
           limit: String(PAGE_SIZE),
           offset: String(currentOffset),
         });
